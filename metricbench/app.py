@@ -1,60 +1,76 @@
-from datasets import Dataset, load_dataset, load_dataset_builder
+from datasets import Dataset, load_dataset
 import pandas as pd
 import streamlit as st
-import pandas as pd
 from PIL import Image
 import io
+import random
 
-# dataset_split_name ="simpleLLM_benchmark_llama3.18binstant_t_0.7"
-# dataset_split_name ="simpleLLM_benchmark_llama3.370bversatile_t_0.7"
-# dataset_split_name ="simpleLLM_benchmark_deepseekr17b_t_0.7"
-dataset_split_name = "simpleLLM_benchmark_mixtral8x7b32768_t_0.7"
-
-
-# Load dataset (replace with actual dataset loading mechanism)
+# Load datasets
 @st.cache_data
 def load_data():
-    # Placeholder: Load dataset from a source
+    raw_dataset: Dataset = load_dataset("CharlyR/varbench-metric-evaluation", "raw", split="train").to_pandas()
+    try:
+        treated_dataset = load_dataset("CharlyR/varbench-metric-evaluation", "treated", split="train").to_pandas()
+    except:
+        treated_df = raw_dataset.iloc[:0]  # Keeps the structure but removes rows
+        treated_dataset = Dataset.from_pandas(treated_df)
 
-    dataset: Dataset = load_dataset(
-        "CharlyR/varbench-metric-evaluation", dataset_split, split="tikz"
-    )
+    # Remove treated entries from raw dataset
+    untreated = raw_dataset[~raw_dataset["id"].isin(treated_dataset["id"])]
+    return untreated, treated_dataset
 
-    return dataset.to_pandas()
+untreated_data, treated_data = load_data()
 
+if untreated_data.empty:
+    st.write("No more entries to review!")
+    st.stop()
 
-data = load_data()
+# Select a random entry
+if "selected_entry" not in st.session_state:
+    st.session_state.selected_entry = untreated_data.sample(n=1).iloc[0]
 
-# Select an entry to display (assuming first row for simplicity)
-entry = data.iloc[0]
+entry = st.session_state.selected_entry
 
 # Display the instruction
 st.title("Code Fix Review")
 st.subheader("Instruction:")
 st.write(entry["instruction"])
 
-# Display the input image
-st.subheader("Input Image:")
-if entry["image_input"]:
-    image_input = Image.open(io.BytesIO(entry["image_input"]))
-    st.image(image_input, caption="Image Input", use_column_width=True)
-else:
-    st.write("No input image available.")
-
-# Display the result image
-st.subheader("Result Image:")
-if entry["images_result"]:
-    image_result = Image.open(io.BytesIO(entry["images_result"]))
-    st.image(image_result, caption="Image Result", use_column_width=True)
-else:
-    st.write("No result image available.")
-
-# Buttons for user response
+# Display images side by side
+st.subheader("Comparison")
 col1, col2 = st.columns(2)
-with col1:
-    if st.button("Applied"):
-        st.write("You marked this as applied.")
 
-with col2:
-    if st.button("Not Applied"):
-        st.write("You marked this as not applied.")
+if entry["image_input"]:
+    with col1:
+        image_input = Image.open(io.BytesIO(entry["image_input"]["bytes"]))
+        st.image(image_input, caption="Input Image", use_column_width=True)
+else:
+    with col1:
+        st.write("No input image available.")
+
+if entry["images_result"]:
+    with col2:
+        image_result = Image.open(io.BytesIO(entry["images_result"]["bytes"]))
+        st.image(image_result, caption="Result Image", use_column_width=True)
+else:
+    with col2:
+        st.write("No result image available.")
+
+# Rating scale
+st.subheader("How well was the instruction applied?")
+score = st.slider("Rate from 1 (not applied) to 10 (perfectly applied)", 1, 10, 5)
+
+# Submit response
+if st.button("Submit Review"):
+    new_entry = entry.copy()
+    new_entry["score"] = score
+    treated_data = pd.concat([treated_data, pd.DataFrame([new_entry])], ignore_index=True)
+    treated_data.to_csv("treated_data.csv", index=False)
+    st.session_state.pop("selected_entry")  # Reset selection for a new entry
+    st.success("Review submitted! Refresh for a new entry.")
+
+# Button to update remote dataset
+if st.button("Update Remote Dataset"):
+    treated_dataset = Dataset.from_pandas(treated_data)
+    treated_dataset.push_to_hub("CharlyR/varbench-metric-evaluation", config_name="treated")
+    st.success("Remote dataset updated!")

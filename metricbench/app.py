@@ -99,7 +99,7 @@ def update_remote():
         .cast_column("image_input", Image(decode=True))
     )
     if len(remote_treated_dataset)>0:
-        topush_dataset = concatenate_datasets(remote_treated_dataset, local_dataset)
+        topush_dataset = concatenate_datasets([remote_treated_dataset, local_dataset])
     else:
         topush_dataset = local_dataset
     topush_dataset.push_to_hub(

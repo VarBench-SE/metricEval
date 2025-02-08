@@ -69,9 +69,37 @@ else:
     with col2:
         st.write("No result image available.")
 
-# Rating scale
 st.subheader("How well was the instruction applied?")
-score = st.slider("Rate from 1 (not applied) to 5 (perfectly applied)", 1, 3, 5)
+
+# Create the slider
+score = st.slider(
+    "Rate from 1 (not applied) to 5 (perfectly applied)",
+    1, 3, 5,
+)
+
+# Add custom labels above the slider
+st.markdown("""
+    <style>
+        .slider-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding: 0 10px;
+        }
+        .slider-container span {
+            font-size: 14px;
+            font-weight: bold;
+            color: #4e4e4e;
+        }
+    </style>
+    <div class="slider-container">
+        <span>Not at all</span>
+        <span>Partially</span>
+        <span>Moderately</span>
+        <span>Well</span>
+        <span>Perfectly</span>
+    </div>
+""", unsafe_allow_html=True)
 
 
 def get_dataset_treated() -> pd.DataFrame:
@@ -83,7 +111,7 @@ def get_dataset_treated() -> pd.DataFrame:
         treated_df = raw_dataframe.iloc[:0]  # Keeps the structure but removes rows
         treated_ds_initial: Dataset = Dataset.from_pandas(
             treated_df, features=raw_dataset.features
-        ).add_column("human_score", [], feature=Value("string"))
+        ).add_column("human_score", [], feature=Value("int64"))
         return treated_ds_initial
 
 

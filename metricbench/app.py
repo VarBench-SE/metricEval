@@ -45,7 +45,7 @@ if "selected_entry" not in st.session_state:
 entry = st.session_state.selected_entry
 
 # Display the instruction
-st.title("Code Fix Review")
+st.title("Code Edit Review")
 st.subheader("Instruction:")
 st.write(entry["instruction"])
 

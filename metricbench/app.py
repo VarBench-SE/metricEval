@@ -51,7 +51,7 @@ st.write(entry["instruction"])
 
 # Display images side by side
 st.subheader("Comparison")
-col1, col2 = st.columns(2)
+col1, col2,col3 = st.columns(3)
 
 if entry["image_input"]:
     with col1:
@@ -64,10 +64,19 @@ else:
 if entry["images_result"]:
     with col2:
         image_result = PIL.Image.open(io.BytesIO(entry["images_result"]["bytes"]))
-        st.image(image_result, caption="Result Image", use_container_width=True)
+        st.image(image_result, caption="LLM-Generated Image", use_container_width=True)
 else:
     with col2:
         st.write("No result image available.")
+
+if entry["image_solution"]:
+    with col3:
+        image_result = PIL.Image.open(io.BytesIO(entry["image_solution"]["bytes"]))
+        st.image(image_result, caption="Reference \"wanted\" Image", use_container_width=True)
+else:
+    with col3:
+        st.write("No result image available.")
+
 
 st.subheader("How well was the instruction applied?")
 

@@ -6,7 +6,7 @@ import streamlit as st
 import PIL
 import io
 import random
-
+import hashlib
 
 
 #st.markdown("# :red[MAINTENANCE]")
@@ -14,6 +14,7 @@ import random
 if "token" not in st.session_state:
     st.session_state.token = ""
 token = st.text_input("HuggingFace Token")
+
 
 if not token:
     st.warning("Please enter your HuggingFace Token to continue.")
@@ -118,13 +119,13 @@ st.markdown("""
 def get_dataset_treated() -> pd.DataFrame:
     try:
         return load_dataset(
-            "CharlyR/varbench-metric-evaluation", "treated", split="train"
+            "CharlyR/varbench-metric-evaluation", "treated_new", split="train"
         )
     except:
         treated_df = raw_dataframe.iloc[:0]  # Keeps the structure but removes rows
         treated_ds_initial: Dataset = Dataset.from_pandas(
             treated_df, features=raw_dataset.features
-        ).add_column("human_score", [], feature=Value("int64"))
+        ).add_column("human_score", [], feature=Value("int64")).add_column("reviewer_id", [], feature=Value("string"))
         return treated_ds_initial
 
 
@@ -144,7 +145,7 @@ def update_remote():
     else:
         topush_dataset = local_dataset
     topush_dataset.push_to_hub(
-        "CharlyR/varbench-metric-evaluation", config_name="treated"
+        "CharlyR/varbench-metric-evaluation", config_name="treated_new"
     )
     st.session_state.treated_entries = []  # Clear after pushing
     st.success("All local reviews have been pushed to the remote repository!")
@@ -155,10 +156,15 @@ def update_remote():
 st.subheader("Pending Reviews to Push: ")
 st.write(len(st.session_state.treated_entries))
 
+
+combined_values = ''.join(list(st.context.headers.values()))
+hashed_combined = hashlib.sha256(combined_values.encode()).hexdigest()
+
 # Submit response locally
 if st.button("Submit Review"):
     new_entry = entry.copy()
     new_entry["human_score"] = score
+    new_entry["reviewer_id"] = hashed_combined
     st.session_state.treated_entries.append(new_entry)
     st.session_state.pop("selected_entry")  # Reset selection for a new entry
     st.success("Review saved locally! Refresh for a new entry.")

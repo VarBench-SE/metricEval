@@ -28,6 +28,17 @@ except:
     st.stop()
 
 
+
+if "id" not in st.session_state:
+    st.session_state.id = ""
+id = st.text_input("Reviewer Id (For Inter-rater agreement, always use the same one)")
+if not id:
+    st.warning("Please enter your id to continue.")
+    st.stop()  # Stops execution until id is provided
+st.session_state.id = id  # Store token
+
+
+
 # Load datasets
 @st.cache_data
 def load_data() -> Dataset:
@@ -165,20 +176,11 @@ st.subheader("Pending Reviews to Push: ")
 st.write(len(st.session_state.treated_entries))
 
 
-combined_values = "".join(
-    [
-        value
-        for key, value in st.context.headers.items()
-        if "Sec-Websocket" not in key or "cookie" not in key
-    ]
-)
-hashed_combined = hashlib.sha256(combined_values.encode()).hexdigest()
-
 # Submit response locally
 if st.button("Submit Review"):
     new_entry = entry.copy()
     new_entry["human_score"] = score
-    new_entry["reviewer_id"] = hashed_combined
+    new_entry["reviewer_id"] = st.session_state.id
     st.session_state.treated_entries.append(new_entry)
     st.session_state.pop("selected_entry")  # Reset selection for a new entry
     st.success("Review saved locally! Refresh for a new entry.")

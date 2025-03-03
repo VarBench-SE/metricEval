@@ -28,7 +28,6 @@ except:
     st.stop()
 
 
-
 if "id" not in st.session_state:
     st.session_state.id = ""
 id = st.text_input("Reviewer Id (For Inter-rater agreement, always use the same one)")
@@ -36,7 +35,6 @@ if not id:
     st.warning("Please enter your id to continue.")
     st.stop()  # Stops execution until id is provided
 st.session_state.id = id  # Store token
-
 
 
 # Load datasets
@@ -48,17 +46,57 @@ def load_data() -> Dataset:
     return raw_dataset
 
 
+def concat(row):
+    return row["id"] + row["config"]
+
+
 raw_dataset: Dataset = load_data()
 raw_dataframe: pd.DataFrame = raw_dataset.to_pandas()
+print(raw_dataframe.columns)
+raw_dataframe["id_config"] = raw_dataframe.apply(concat, axis=1)
+print(raw_dataframe.columns)
+
+
+def get_dataset_treated() -> Dataset:
+    try:
+        return load_dataset(
+            "CharlyR/varbench-metric-evaluation", "treated_new", split="train"
+        )
+    except:
+        treated_df = raw_dataframe.iloc[:0]  # Keeps the structure but removes rows
+        treated_ds_initial: Dataset = (
+            Dataset.from_pandas(treated_df, features=raw_dataset.features)
+            .add_column("human_score", [], feature=Value("int64"))
+            .add_column("reviewer_id", [], feature=Value("string"))
+        )
+        return treated_ds_initial
+
 
 # Store treated entries locally
 if "treated_entries" not in st.session_state:
     st.session_state.treated_entries = []
 
+
 # Select a random entry
 if "selected_entry" not in st.session_state:
-    st.session_state.selected_entry = raw_dataframe.sample(n=1).iloc[0].to_dict()
+    if "ids_of_treated" not in st.session_state:
 
+        treated = get_dataset_treated().to_pandas()
+        treated["id_config"] = treated.apply(concat, axis=1)
+        st.session_state.ids_of_treated = (
+            treated[treated["reviewer_id"] == id]["id_config"].tolist()
+        )
+    ids_of_treated = st.session_state.ids_of_treated
+    not_treated_dataframe = raw_dataframe[
+        ~raw_dataframe["id_config"].isin(ids_of_treated)
+    ]  # getting a random id not already treated
+    if len(not_treated_dataframe) > 0:
+        st.session_state.selected_entry = (
+            not_treated_dataframe.sample(n=1).iloc[0].to_dict()
+        )
+    else:
+        st.warning("You have already rated everything generated for now")
+        st.stop()  # Stops execution until id is provided
 entry = st.session_state.selected_entry
 
 # Display the instruction
@@ -135,24 +173,10 @@ st.markdown(
 )
 
 
-def get_dataset_treated() -> pd.DataFrame:
-    try:
-        return load_dataset(
-            "CharlyR/varbench-metric-evaluation", "treated_new", split="train"
-        )
-    except:
-        treated_df = raw_dataframe.iloc[:0]  # Keeps the structure but removes rows
-        treated_ds_initial: Dataset = (
-            Dataset.from_pandas(treated_df, features=raw_dataset.features)
-            .add_column("human_score", [], feature=Value("int64"))
-            .add_column("reviewer_id", [], feature=Value("string"))
-        )
-        return treated_ds_initial
-
-
 def update_remote():
     remote_treated_dataset = get_dataset_treated()
-    local_df = pd.DataFrame(st.session_state.treated_entries)
+    local_df: pd.DataFrame = pd.DataFrame(st.session_state.treated_entries)
+    local_df = local_df.drop(columns=["id_config"])
     new_ds = Dataset.from_pandas(local_df, features=remote_treated_dataset.features)
     local_dataset: Dataset = (
         new_ds.cast_column("image_solution", Image(decode=True))
@@ -178,6 +202,7 @@ st.write(len(st.session_state.treated_entries))
 
 # Submit response locally
 if st.button("Submit Review"):
+    st.session_state.ids_of_treated.append(entry["id_config"])
     new_entry = entry.copy()
     new_entry["human_score"] = score
     new_entry["reviewer_id"] = st.session_state.id

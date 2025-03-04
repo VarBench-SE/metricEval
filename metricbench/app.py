@@ -58,6 +58,8 @@ print(raw_dataframe.columns)
 
 def update_remote():
     remote_treated_dataset = get_dataset_treated()
+    if not local_df:
+        return
     local_df: pd.DataFrame = pd.DataFrame(st.session_state.treated_entries)
     local_df = local_df.drop(columns=["id_config"])
     new_ds = Dataset.from_pandas(local_df, features=remote_treated_dataset.features)

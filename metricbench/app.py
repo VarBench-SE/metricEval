@@ -58,7 +58,7 @@ print(raw_dataframe.columns)
 
 def update_remote():
     remote_treated_dataset = get_dataset_treated()
-    if not local_df:
+    if not st.session_state.treated_entries:
         return
     local_df: pd.DataFrame = pd.DataFrame(st.session_state.treated_entries)
     local_df = local_df.drop(columns=["id_config"])

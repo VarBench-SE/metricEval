@@ -56,6 +56,27 @@ print(raw_dataframe.columns)
 raw_dataframe["id_config"] = raw_dataframe.apply(concat, axis=1)
 print(raw_dataframe.columns)
 
+def update_remote():
+    remote_treated_dataset = get_dataset_treated()
+    local_df: pd.DataFrame = pd.DataFrame(st.session_state.treated_entries)
+    local_df = local_df.drop(columns=["id_config"])
+    new_ds = Dataset.from_pandas(local_df, features=remote_treated_dataset.features)
+    local_dataset: Dataset = (
+        new_ds.cast_column("image_solution", Image(decode=True))
+        .cast_column("images_result", Image(decode=True))
+        .cast_column("image_input", Image(decode=True))
+    )
+    if len(remote_treated_dataset) > 0:
+        topush_dataset = concatenate_datasets([remote_treated_dataset, local_dataset])
+    else:
+        topush_dataset = local_dataset
+    topush_dataset.push_to_hub(
+        "CharlyR/varbench-metric-evaluation", config_name="treated_new"
+    )
+    st.session_state.treated_entries = []  # Clear after pushing
+    st.success("All local reviews have been pushed to the remote repository!")
+    st.rerun()
+
 
 def get_dataset_treated() -> Dataset:
     try:
@@ -96,6 +117,7 @@ if "selected_entry" not in st.session_state:
         )
     else:
         st.warning("You have already rated everything generated for now")
+        update_remote()
         st.stop()  # Stops execution until id is provided
 entry = st.session_state.selected_entry
 
@@ -173,26 +195,7 @@ st.markdown(
 )
 
 
-def update_remote():
-    remote_treated_dataset = get_dataset_treated()
-    local_df: pd.DataFrame = pd.DataFrame(st.session_state.treated_entries)
-    local_df = local_df.drop(columns=["id_config"])
-    new_ds = Dataset.from_pandas(local_df, features=remote_treated_dataset.features)
-    local_dataset: Dataset = (
-        new_ds.cast_column("image_solution", Image(decode=True))
-        .cast_column("images_result", Image(decode=True))
-        .cast_column("image_input", Image(decode=True))
-    )
-    if len(remote_treated_dataset) > 0:
-        topush_dataset = concatenate_datasets([remote_treated_dataset, local_dataset])
-    else:
-        topush_dataset = local_dataset
-    topush_dataset.push_to_hub(
-        "CharlyR/varbench-metric-evaluation", config_name="treated_new"
-    )
-    st.session_state.treated_entries = []  # Clear after pushing
-    st.success("All local reviews have been pushed to the remote repository!")
-    st.rerun()
+
 
 
 # Display the count of reviews not pushed

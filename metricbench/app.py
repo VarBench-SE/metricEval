@@ -195,8 +195,8 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-
-
+comment = ""
+st.text_area("Enter comment about the LLM-generated image, i.e. what is wrong with it with regard to the instruction.(Leave empty if the image is perfect)",comment)
 
 
 
@@ -210,6 +210,8 @@ if st.button("Submit Review"):
     st.session_state.ids_of_treated.append(entry["id_config"])
     new_entry = entry.copy()
     new_entry["human_score"] = score
+    new_entry["human_comment"] = comment
+    comment = ""#reset comment
     new_entry["reviewer_id"] = st.session_state.id
     st.session_state.treated_entries.append(new_entry)
     st.session_state.pop("selected_entry")  # Reset selection for a new entry

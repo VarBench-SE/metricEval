@@ -1,5 +1,5 @@
 import PIL.Image
-from datasets import Dataset, load_dataset, concatenate_datasets, Value, Image
+from datasets import Dataset, load_dataset, concatenate_datasets, Value, Image, Sequence
 from huggingface_hub import login
 import pandas as pd
 import streamlit as st
@@ -40,9 +40,14 @@ st.session_state.id = id  # Store token
 # Load datasets
 @st.cache_data
 def load_data() -> Dataset:
-    raw_dataset: Dataset = load_dataset(
-        "CharlyR/varbench-metric-evaluation", "raw", split="train"
-    )
+    try:
+        raw_dataset: Dataset = load_dataset(
+            "CharlyR/vtikz-human-annotated", "raw", split="train"
+        )
+    except:
+        raw_dataset: Dataset = load_dataset(
+            "CharlyR/vtikz-human-annotated", split="train"
+        )
     return raw_dataset
 
 
@@ -52,19 +57,19 @@ def concat(row):
 
 raw_dataset: Dataset = load_data()
 raw_dataframe: pd.DataFrame = raw_dataset.to_pandas()
-print(raw_dataframe.columns)
 raw_dataframe["id_config"] = raw_dataframe.apply(concat, axis=1)
-print(raw_dataframe.columns)
+
 
 def update_remote():
     remote_treated_dataset = get_dataset_treated()
     if not st.session_state.treated_entries:
         return
+    print(remote_treated_dataset.features)
     local_df: pd.DataFrame = pd.DataFrame(st.session_state.treated_entries)
     local_df = local_df.drop(columns=["id_config"])
     new_ds = Dataset.from_pandas(local_df, features=remote_treated_dataset.features)
     local_dataset: Dataset = (
-        new_ds.cast_column("image_solution", Image(decode=True))
+        new_ds.cast_column("image_solution", Sequence(Image(decode=True)))
         .cast_column("images_result", Image(decode=True))
         .cast_column("image_input", Image(decode=True))
     )
@@ -72,9 +77,7 @@ def update_remote():
         topush_dataset = concatenate_datasets([remote_treated_dataset, local_dataset])
     else:
         topush_dataset = local_dataset
-    topush_dataset.push_to_hub(
-        "CharlyR/varbench-metric-evaluation", config_name="treated_new"
-    )
+    topush_dataset.push_to_hub("CharlyR/vtikz-human-annotated", config_name="annotated")
     st.session_state.treated_entries = []  # Clear after pushing
     st.success("All local reviews have been pushed to the remote repository!")
     st.rerun()
@@ -82,14 +85,14 @@ def update_remote():
 
 def get_dataset_treated() -> Dataset:
     try:
-        return load_dataset(
-            "CharlyR/varbench-metric-evaluation", "treated_new", split="train"
-        )
+        return load_dataset("CharlyR/vtikz-human-annotated", "annotated", split="train")
     except:
         treated_df = raw_dataframe.iloc[:0]  # Keeps the structure but removes rows
+        features = raw_dataset.features.copy()
         treated_ds_initial: Dataset = (
-            Dataset.from_pandas(treated_df, features=raw_dataset.features)
+            Dataset.from_pandas(treated_df.drop(columns=["id_config"]), features=features)
             .add_column("human_score", [], feature=Value("int64"))
+            .add_column("human_comment", [], feature=Value("string"))
             .add_column("reviewer_id", [], feature=Value("string"))
         )
         return treated_ds_initial
@@ -106,9 +109,9 @@ if "selected_entry" not in st.session_state:
 
         treated = get_dataset_treated().to_pandas()
         treated["id_config"] = treated.apply(concat, axis=1)
-        st.session_state.ids_of_treated = (
-            treated[treated["reviewer_id"] == id]["id_config"].tolist()
-        )
+        st.session_state.ids_of_treated = treated[treated["reviewer_id"] == id][
+            "id_config"
+        ].tolist()
     ids_of_treated = st.session_state.ids_of_treated
     not_treated_dataframe = raw_dataframe[
         ~raw_dataframe["id_config"].isin(ids_of_treated)
@@ -148,9 +151,9 @@ else:
     with col2:
         st.write("No result image available.")
 
-if entry["image_solution"]:
+if entry["image_solution"][0]:
     with col3:
-        image_result = PIL.Image.open(io.BytesIO(entry["image_solution"]["bytes"]))
+        image_result = PIL.Image.open(io.BytesIO(entry["image_solution"][0]["bytes"]))
         st.image(
             image_result, caption='Reference "wanted" Image', use_container_width=True
         )
@@ -195,28 +198,32 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-comment = ""
-st.text_area("Enter comment about the LLM-generated image, i.e. what is wrong with it with regard to the instruction.(Leave empty if the image is perfect)",comment)
-
+st.text_area(
+    "Enter comment about the LLM-generated image, i.e. what is wrong with it with regard to the instruction.(Leave empty if the image is perfect)",
+    key="human_comment",
+)
 
 
 # Display the count of reviews not pushed
 st.subheader("Pending Reviews to Push: ")
 st.write(len(st.session_state.treated_entries))
 
-
-# Submit response locally
-if st.button("Submit Review"):
+def on_submit():
     st.session_state.ids_of_treated.append(entry["id_config"])
     new_entry = entry.copy()
     new_entry["human_score"] = score
-    new_entry["human_comment"] = comment
-    comment = ""#reset comment
+    new_entry["human_comment"] = st.session_state.human_comment
+    st.session_state.human_comment = ""
+    comment = ""  # reset comment
     new_entry["reviewer_id"] = st.session_state.id
     st.session_state.treated_entries.append(new_entry)
     st.session_state.pop("selected_entry")  # Reset selection for a new entry
     st.success("Review saved locally! Refresh for a new entry.")
     st.rerun()
+# Submit response locally
+st.button("Submit Review",on_click=on_submit)
+    
+
 
 # Push all saved reviews to remote
 if st.button("Push Reviews to Remote"):

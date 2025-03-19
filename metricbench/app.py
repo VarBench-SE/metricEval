@@ -218,8 +218,7 @@ def on_submit():
     new_entry["reviewer_id"] = st.session_state.id
     st.session_state.treated_entries.append(new_entry)
     st.session_state.pop("selected_entry")  # Reset selection for a new entry
-    st.success("Review saved locally! Refresh for a new entry.")
-    st.rerun()
+    
 # Submit response locally
 st.button("Submit Review",on_click=on_submit)
     
